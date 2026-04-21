@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Agent Dashboard</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --purple:   #8b5cf6;
+    --blue:     #3b82f6;
+    --green:    #22c55e;
+    --orange:   #f97316;
+    --red:      #ef4444;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+
+  /* ── Navbar ── */
+  .navbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: .6rem 1.2rem; }
+  .brand  { font-weight: 700; font-size: 1.1rem; letter-spacing: .5px; }
+  .brand span { color: var(--purple); }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .25rem .7rem; border-radius: 999px;
+    font-size: .75rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--bg);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+  .dot.red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+  .dot.pulse  { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Layout ── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 0;
+    height: calc(100vh - 54px);
+  }
+  .panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Chat ── */
+  .chat-header { padding: .75rem 1rem; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+  .chat-body   { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+  .chat-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); background: var(--surface); }
+
+  .msg { display: flex; gap: .6rem; max-width: 90%; }
+  .msg.user  { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.agent { align-self: flex-start; }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: grid; place-items: center; font-size: .8rem; flex-shrink: 0;
+  }
+  .avatar.user  { background: linear-gradient(135deg,#3b82f6,#8b5cf6); }
+  .avatar.agent { background: linear-gradient(135deg,#22c55e,#3b82f6); }
+
+  .bubble {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: .6rem .85rem;
+    font-size: .88rem; line-height: 1.55;
+  }
+  .msg.user .bubble { background: #1e3a5f; border-color: #2d5a8e; }
+
+  /* tool call cards */
+  .tool-card {
+    margin-top: .5rem; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); font-size: .78rem;
+  }
+  .tool-card-header {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .35rem .65rem; cursor: pointer;
+    background: #1c2128; user-select: none;
+  }
+  .tool-card-header:hover { background: #252b33; }
+  .tool-name { font-weight: 600; }
+  .tool-card-body { padding: .5rem .65rem; background: #0d1117; display: none; }
+  .tool-card-body.open { display: block; }
+  .tool-badge { font-size: .7rem; padding: .15rem .45rem; border-radius: 4px; }
+  .tb-pinecone { background: #3b0764; color: #c084fc; }
+  .tb-mysql    { background: #083344; color: #67e8f9; }
+  .tb-success  { background: #052e16; color: #86efac; }
+  .tb-error    { background: #450a0a; color: #fca5a5; }
+
+  pre.tool-json {
+    margin: 0; padding: .4rem; background: #161b22;
+    border-radius: 6px; overflow-x: auto;
+    font-size: .72rem; color: #a5d6ff; max-height: 200px; overflow-y: auto;
+  }
+
+  .typing { display: flex; gap: 4px; align-items: center; padding: .5rem .85rem; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+    animation: bounce .8s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+  /* chat input */
+  .chat-input-wrap { display: flex; gap: .5rem; }
+  #chat-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: .5rem .85rem; color: var(--text);
+    font-size: .88rem; outline: none; resize: none; min-height: 42px; max-height: 120px;
+  }
+  #chat-input:focus { border-color: var(--purple); }
+  .send-btn {
+    background: var(--purple); border: none; border-radius: 8px;
+    padding: 0 1rem; color: #fff; cursor: pointer; font-size: .9rem;
+    transition: background .2s;
+  }
+  .send-btn:hover { background: #7c3aed; }
+  .send-btn:disabled { background: #4c1d95; opacity: .5; cursor: not-allowed; }
+
+  /* quick prompts */
+  .quick-btns { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  .qbtn {
+    background: #1c2128; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: .2rem .6rem; font-size: .73rem;
+    cursor: pointer; transition: all .15s;
+  }
+  .qbtn:hover { background: #252b33; color: var(--text); border-color: var(--purple); }
+
+  /* ── Right panel ── */
+  .right-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tab-btn {
+    flex: 1; padding: .65rem; background: none; border: none;
+    color: var(--muted); font-size: .82rem; font-weight: 600; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all .15s;
+  }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--purple); }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+  .tab-content { flex: 1; overflow-y: auto; padding: 1rem; display: none; }
+  .tab-content.active { display: block; }
+
+  /* stat cards */
+  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: .75rem;
+  }
+  .stat-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .stat-val   { font-size: 1.4rem; font-weight: 700; margin-top: .1rem; }
+
+  /* search */
+  .search-wrap { display: flex; gap: .5rem; margin-bottom: .75rem; }
+  .search-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: .4rem .75rem; color: var(--text);
+    font-size: .84rem; outline: none;
+  }
+  .search-input:focus { border-color: var(--purple); }
+  .search-btn {
+    background: var(--purple); border: none; border-radius: 8px;
+    padding: 0 .75rem; color: #fff; cursor: pointer; font-size: .85rem;
+  }
+
+  /* memory result cards */
+  .mem-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: .65rem .8rem; margin-bottom: .5rem;
+  }
+  .mem-score { font-size: .7rem; font-weight: 700; color: var(--purple); }
+  .mem-text  { font-size: .82rem; margin-top: .2rem; }
+  .mem-meta  { font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+
+  /* DB explorer */
+  .table-select { margin-bottom: .75rem; }
+  .table-select select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: .4rem .75rem; color: var(--text);
+    font-size: .84rem; outline: none; cursor: pointer;
+  }
+  .table-select select:focus { border-color: var(--blue); }
+
+  .data-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  .data-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .data-table th {
+    background: #1c2128; padding: .45rem .65rem;
+    text-align: left; color: var(--muted); font-weight: 600;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .data-table td {
+    padding: .4rem .65rem; border-bottom: 1px solid #21262d;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #161b22; }
+  .empty-state { text-align: center; padding: 2rem; color: var(--muted); font-size: .85rem; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  .section-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: .6rem; }
+</style>
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="navbar d-flex align-items-center justify-content-between">
+  <div class="brand"><i class="fa-solid fa-robot me-2" style="color:var(--purple)"></i>AI Agent <span>Dashboard</span></div>
+  <div class="d-flex gap-2" id="status-bar">
+    <span class="status-pill"><span class="dot pulse" id="d-claude"></span><i class="fa-brands fa-python" style="font-size:.75rem"></i> Claude</span>
+    <span class="status-pill"><span class="dot pulse" id="d-pinecone"></span><i class="fa-solid fa-database" style="font-size:.75rem;color:#c084fc"></i> Pinecone</span>
+    <span class="status-pill"><span class="dot pulse" id="d-mysql"></span><i class="fa-solid fa-server" style="font-size:.75rem;color:#67e8f9"></i> MySQL</span>
+  </div>
+</nav>
+
+<!-- ── Main grid ── -->
+<div class="main-grid">
+
+  <!-- ── Left: Chat ── -->
+  <div class="panel">
+    <div class="chat-header">
+      <i class="fa-solid fa-comment-dots" style="color:var(--purple)"></i>
+      Agent Chat
+      <span class="ms-auto text-muted" style="font-size:.75rem;font-weight:400" id="model-label">claude-sonnet-4-6</span>
+    </div>
+    <div class="chat-body" id="chat-body">
+      <!-- welcome -->
+      <div class="msg agent">
+        <div class="avatar agent"><i class="fa-solid fa-robot"></i></div>
+        <div>
+          <div class="bubble">
+            Hi! I'm connected to <strong>Pinecone</strong> (semantic memory) and <strong>MySQL</strong> (structured data) via an MCP server.<br><br>
+            Try asking me to remember something, search your memories, or query the database.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="chat-footer">
+      <div class="quick-btns">
+        <button class="qbtn" onclick="sendQuick('Remember that I built this AI agent dashboard on April 21 2026')">💾 Store a memory</button>
+        <button class="qbtn" onclick="sendQuick('What do you know about this project?')">🔍 Search memory</button>
+        <button class="qbtn" onclick="sendQuick('Show me all rows in the memories table')">🗄️ Query MySQL</button>
+        <button class="qbtn" onclick="sendQuick('List all available database tables and describe their schemas')">📋 List tables</button>
+      </div>
+      <div class="chat-input-wrap">
+        <textarea id="chat-input" placeholder="Ask the agent anything…" rows="1"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: Explorer ── -->
+  <div class="right-panel">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('memories')"><i class="fa-solid fa-brain me-1" style="color:#c084fc"></i>Memories</button>
+      <button class="tab-btn" onclick="switchTab('database')"><i class="fa-solid fa-table me-1" style="color:#67e8f9"></i>Database</button>
+      <button class="tab-btn" onclick="switchTab('tools')"><i class="fa-solid fa-wrench me-1" style="color:#fbbf24"></i>MCP Tools</button>
+    </div>
+
+    <!-- Memories tab -->
+    <div class="tab-content active" id="tab-memories">
+      <div class="section-title">Pinecone Index</div>
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Vectors stored</div>
+          <div class="stat-val" style="color:var(--purple)" id="vec-count">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Dimensions</div>
+          <div class="stat-val" style="color:var(--blue)" id="vec-dim">—</div>
+        </div>
+      </div>
+      <div class="section-title">Semantic Search</div>
+      <div class="search-wrap">
+        <input class="search-input" id="mem-q" placeholder="Search your memories…" onkeydown="if(event.key==='Enter')searchMem()" />
+        <button class="search-btn" onclick="searchMem()"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+      <div id="mem-results">
+        <div class="empty-state"><i class="fa-solid fa-brain" style="font-size:2rem;color:var(--border)"></i><br>Search or chat to see memories</div>
+      </div>
+    </div>
+
+    <!-- Database tab -->
+    <div class="tab-content" id="tab-database">
+      <div class="section-title">MySQL Explorer</div>
+      <div class="table-select">
+        <select id="table-sel" onchange="loadTable(this.value)">
+          <option value="">— Select a table —</option>
+        </select>
+      </div>
+      <div id="db-content">
+        <div class="empty-state"><i class="fa-solid fa-server" style="font-size:2rem;color:var(--border)"></i><br>Select a table to browse</div>
+      </div>
+    </div>
+
+    <!-- MCP Tools tab -->
+    <div class="tab-content" id="tab-tools">
+      <div class="section-title">Available MCP Tools</div>
+      <div id="tools-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let history = [];
+
+const TOOLS_META = [
+  { name:"store_memory",         icon:"fa-brain",      badge:"tb-pinecone", db:"Pinecone",  desc:"Embed text and store it as a vector for semantic retrieval." },
+  { name:"search_memory",        icon:"fa-magnifying-glass", badge:"tb-pinecone", db:"Pinecone", desc:"Find the most similar stored memories using cosine similarity." },
+  { name:"mysql_query",          icon:"fa-table",      badge:"tb-mysql",    db:"MySQL",    desc:"Execute a SELECT / SHOW / DESCRIBE query and return rows." },
+  { name:"mysql_execute",        icon:"fa-pen-to-square",badge:"tb-mysql",  db:"MySQL",    desc:"Run INSERT, UPDATE or DELETE and return affected rows." },
+  { name:"mysql_list_tables",    icon:"fa-list",       badge:"tb-mysql",    db:"MySQL",    desc:"List all tables in the connected database." },
+  { name:"mysql_describe_table", icon:"fa-sitemap",    badge:"tb-mysql",    db:"MySQL",    desc:"Describe the column schema of a table." },
+];
+
+// ── Init ───────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  checkStatus();
+  loadMemStats();
+  loadTables();
+  renderToolsList();
+  setInterval(loadMemStats, 15000);
+  document.getElementById('chat-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+});
+
+// ── Status ─────────────────────────────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const r = await fetch('/api/status').then(x => x.json());
+    setDot('d-claude',   r.anthropic?.ok);
+    setDot('d-pinecone', r.pinecone?.ok);
+    setDot('d-mysql',    r.mysql?.ok);
+    if (r.mysql?.version) {
+      document.querySelector('#d-mysql').closest('.status-pill').title = 'MySQL ' + r.mysql.version;
+    }
+  } catch(e) {
+    ['d-claude','d-pinecone','d-mysql'].forEach(id => setDot(id, false));
+  }
+}
+function setDot(id, ok) {
+  const el = document.getElementById(id);
+  el.className = 'dot ' + (ok === true ? 'green' : ok === false ? 'red' : 'pulse');
+}
+
+// ── Memory stats ───────────────────────────────────────────────────────────
+async function loadMemStats() {
+  try {
+    const s = await fetch('/api/memories/stats').then(x => x.json());
+    document.getElementById('vec-count').textContent = s.total ?? '—';
+    document.getElementById('vec-dim').textContent   = s.dim   ?? '—';
+  } catch(e) {}
+}
+
+// ── Table list ─────────────────────────────────────────────────────────────
+async function loadTables() {
+  try {
+    const tables = await fetch('/api/tables').then(x => x.json());
+    const sel = document.getElementById('table-sel');
+    tables.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = t;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+async function loadTable(name) {
+  if (!name) return;
+  const box = document.getElementById('db-content');
+  box.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+  try {
+    const data = await fetch(`/api/table/${name}`).then(x => x.json());
+    if (data.error) { box.innerHTML = `<div class="empty-state text-danger">${data.error}</div>`; return; }
+    const { rows, schema } = data;
+    if (!rows.length) { box.innerHTML = '<div class="empty-state">Table is empty</div>'; return; }
+    const cols = schema.map(c => c.Field);
+    let html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
+    cols.forEach(c => html += `<th>${c}</th>`);
+    html += '</tr></thead><tbody>';
+    rows.forEach(row => {
+      html += '<tr>';
+      cols.forEach(c => html += `<td title="${esc(String(row[c] ?? ''))}">${esc(String(row[c] ?? ''))}</td>`);
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += `<div class="text-muted mt-2" style="font-size:.72rem">${rows.length} row(s) shown</div>`;
+    box.innerHTML = html;
+  } catch(e) { box.innerHTML = `<div class="empty-state text-danger">${e}</div>`; }
+}
+
+// ── Memory search ──────────────────────────────────────────────────────────
+async function searchMem() {
+  const q = document.getElementById('mem-q').value.trim();
+  if (!q) return;
+  const box = document.getElementById('mem-results');
+  box.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i></div>';
+  try {
+    const results = await fetch(`/api/memories/search?q=${encodeURIComponent(q)}&top_k=6`).then(x => x.json());
+    if (!results.length) { box.innerHTML = '<div class="empty-state">No results found</div>'; return; }
+    box.innerHTML = results.map(m => `
+      <div class="mem-card">
+        <div class="d-flex justify-content-between align-items-center">
+          <span class="mem-score">Score: ${m.score}</span>
+          <span class="text-muted" style="font-size:.68rem">${m.id.slice(0,8)}…</span>
+        </div>
+        <div class="mem-text">${esc(m.text)}</div>
+        ${Object.keys(m.metadata).length ? `<div class="mem-meta">${esc(JSON.stringify(m.metadata))}</div>` : ''}
+      </div>`).join('');
+    loadMemStats();
+  } catch(e) { box.innerHTML = `<div class="empty-state text-danger">${e}</div>`; }
+}
+
+// ── MCP Tools list ─────────────────────────────────────────────────────────
+function renderToolsList() {
+  const box = document.getElementById('tools-list');
+  box.innerHTML = TOOLS_META.map(t => `
+    <div class="mem-card mb-2">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <i class="fa-solid ${t.icon}" style="color:${t.badge==='tb-pinecone'?'#c084fc':'#67e8f9'}"></i>
+        <strong style="font-size:.83rem">${t.name}</strong>
+        <span class="tool-badge ${t.badge} ms-auto">${t.db}</span>
+      </div>
+      <div style="font-size:.78rem;color:var(--muted)">${t.desc}</div>
+    </div>`).join('');
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function sendQuick(msg) {
+  document.getElementById('chat-input').value = msg;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+
+  appendMsg('user', msg);
+  const typingEl = appendTyping();
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ message: msg, history }),
+    }).then(x => x.json());
+
+    typingEl.remove();
+
+    if (resp.error) {
+      appendMsg('agent', '⚠️ Error: ' + resp.error);
+    } else {
+      history = resp.history;
+      appendAgentMsg(resp.reply, resp.tool_calls || []);
+      // refresh memory stats if Pinecone was touched
+      if (resp.tool_calls?.some(t => t.tool.includes('memory'))) {
+        loadMemStats();
+        const q = document.getElementById('mem-q').value.trim();
+        if (q) searchMem();
+      }
+      // refresh DB if MySQL was touched
+      const sel = document.getElementById('table-sel');
+      if (resp.tool_calls?.some(t => t.tool.startsWith('mysql')) && sel.value) {
+        loadTable(sel.value);
+      }
+    }
+  } catch(e) {
+    typingEl.remove();
+    appendMsg('agent', '⚠️ Network error: ' + e);
+  }
+  btn.disabled = false;
+}
+
+function appendMsg(role, text) {
+  const body = document.getElementById('chat-body');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const icon = role === 'user' ? 'fa-user' : 'fa-robot';
+  div.innerHTML = `
+    <div class="avatar ${role}"><i class="fa-solid ${icon}"></i></div>
+    <div><div class="bubble">${esc(text)}</div></div>`;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+  return div;
+}
+
+function appendAgentMsg(text, toolCalls) {
+  const body = document.getElementById('chat-body');
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+
+  let toolHtml = '';
+  toolCalls.forEach((tc, i) => {
+    const meta  = TOOLS_META.find(m => m.name === tc.tool) || {};
+    const badge = meta.badge || 'tb-success';
+    const icon  = meta.icon  || 'fa-wrench';
+    const color = badge === 'tb-pinecone' ? '#c084fc' : '#67e8f9';
+    const statusBadge = tc.status === 'success'
+      ? '<span class="tool-badge tb-success ms-auto">✓ success</span>'
+      : '<span class="tool-badge tb-error ms-auto">✗ error</span>';
+    toolHtml += `
+      <div class="tool-card">
+        <div class="tool-card-header" onclick="toggleCard(this)">
+          <i class="fa-solid ${icon}" style="color:${color}"></i>
+          <span class="tool-name">${tc.tool}</span>
+          <span class="tool-badge ${badge}">${meta.db||'Tool'}</span>
+          ${statusBadge}
+          <i class="fa-solid fa-chevron-down ms-1" style="font-size:.65rem;color:var(--muted)"></i>
+        </div>
+        <div class="tool-card-body">
+          <div class="text-muted mb-1" style="font-size:.7rem">INPUT</div>
+          <pre class="tool-json">${esc(JSON.stringify(tc.input, null, 2))}</pre>
+          <div class="text-muted mt-2 mb-1" style="font-size:.7rem">OUTPUT</div>
+          <pre class="tool-json">${esc(JSON.stringify(tc.output, null, 2))}</pre>
+        </div>
+      </div>`;
+  });
+
+  div.innerHTML = `
+    <div class="avatar agent"><i class="fa-solid fa-robot"></i></div>
+    <div style="flex:1;min-width:0">
+      <div class="bubble">${escHtml(text)}</div>
+      ${toolHtml}
+    </div>`;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+}
+
+function appendTyping() {
+  const body = document.getElementById('chat-body');
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+  div.innerHTML = `
+    <div class="avatar agent"><i class="fa-solid fa-robot"></i></div>
+    <div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+  return div;
+}
+
+function toggleCard(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`#tab-${name}`).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function escHtml(s) {
+  // allow basic markdown-ish bold/newlines
+  return esc(s).replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+}
+</script>
+</body>
+</html>
